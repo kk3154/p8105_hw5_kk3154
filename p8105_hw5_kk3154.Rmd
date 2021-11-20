@@ -29,12 +29,141 @@ scale_fill_discrete = scale_fill_viridis_d
 theme_set(theme_minimal() + theme(legend.position = "bottom"))
 ```
 
-## Problem 1
+## Problem 1 - Homicide Data
 
-Downloading the homicide data:
+The Washington Post collected homicide data from 50 cities in the US for an [article](https://www.washingtonpost.com/graphics/2018/investigations/where-murders-go-unsolved/) and spatial analysis on unsolved murders. They shared their data in a [github repository](https://github.com/washingtonpost/data-homicides).
+
+Problem 1 works with the homicide data to estimate the unsolved homicide rate in each city. 
+
+Downloading the homicide data, summarizing the raw data, creating a combined city_state variable, and summarizing the total number of homicides and unsolved homicides (disposition of "Closed without arrest" or "Open/No arrest") by cities:
 ```{r}
-homicide_df = read_csv(file = "./Data/homicide_data.csv")
+raw_hom_data = read_csv(file = "./Data/homicide_data.csv")
+skimr::skim(raw_hom_data)
+
+homicide_df = read_csv(file = "./Data/homicide_data.csv", na = c("", "Unknown")) %>% 
+  mutate(
+    city_state = str_c(city, state),
+    resolution = case_when(
+      disposition == "Closed without arrest" ~ "unsolved",
+      disposition == "Open/No arrest" ~ "unsolved",
+      disposition == "Closed by arrest" ~ "solved"
+    )) %>% 
+  relocate(city_state) %>% 
+  filter(city_state != "TulsaAL")
+
+homicide_df %>% 
+  group_by(city_state) %>% 
+  summarize(homicide_count = n(),
+            unsolved_homicides = sum(resolution == "unsolved")) %>% 
+  arrange(homicide_count) %>% 
+  knitr::kable(
+    col.names = c("City", "Count of  Homicides", "Count of Unsolved Homicides")
+  )
 ```
+
+For the city of Baltimore, MD, use the `prop.test` function to estimate the proportion of homicides that are unsolved; save the output of `prop.test` as an R object, apply the `broom::tidy` to this object and pull the estimated proportion and confidence intervals from the resulting tidy dataframe.
+
+```{r}
+baltimore_df = 
+  homicide_df %>% 
+  filter(city_state == "BaltimoreMD")
+  
+baltimore_summary = 
+  baltimore_df %>% 
+  summarize(
+    unsolved = sum(resolution == "unsolved"),
+    n = n()
+  )
+
+baltimore_test=  
+  prop.test(
+    x = baltimore_summary %>% pull(unsolved),
+    n = baltimore_summary %>% pull(n))
+
+baltimore_test %>% 
+  broom::tidy()
+```
+
+Now run prop.test for each of the cities in your dataset, and extract both the proportion of unsolved homicides and the confidence interval for each. Do this within a “tidy” pipeline, making use of `purrr::map`, `purrr::map2`, list columns and `unnest` as necessary to create a tidy dataframe with estimated proportions and CIs for each city.
+
+Writing function and testing on a few cities:
+```{r}
+prop_test_function = function(city_df) {
+  
+  city_summary = 
+    city_df %>% 
+    summarize(
+      unsolved = sum(resolution == "unsolved"),
+      n = n())
+  
+  city_test = 
+    prop.test(
+      x = city_summary %>% pull(unsolved),
+      n = city_summary %>% pull(n))
+  
+  return(city_test)
+
+}
+
+prop_test_function(baltimore_df)
+
+homicide_df %>% 
+  filter(city_state == "AlbuquerqueNM") %>% 
+  prop_test_function()
+```
+
+Iterating across all cities:
+```{r}
+results_df = 
+  homicide_df %>% 
+  nest(data = uid:resolution) %>% 
+  mutate(
+    test_results = map(data, prop_test_function),
+    tidy_results = map(test_results, broom::tidy)
+  ) %>% 
+  select(city_state, tidy_results) %>% 
+  unnest(tidy_results) %>% 
+  select(city_state, estimate, starts_with("conf"))
+
+results_df
+```
+
+Alternate approach without creating a function, using map2:
+```{r}
+homicide_df %>% 
+  group_by(city_state) %>% 
+  summarize(homicide_count = n(),
+            unsolved_homicides = sum(resolution == "unsolved")) %>% 
+  mutate(
+    test_results = map2(unsolved_homicides, homicide_count, prop.test),
+    tidy_results = map(test_results, broom::tidy)
+  ) %>% 
+  select(city_state, tidy_results) %>% 
+  unnest(tidy_results) %>% 
+  select(city_state, estimate, starts_with("conf"))
+```
+
+Create a plot that shows the estimates and CIs for each city – check out `geom_errorbar` for a way to add error bars based on the upper and lower limits. Organize cities according to the proportion of unsolved homicides.
+
+```{r}
+results_df %>% 
+  mutate(city_state = fct_reorder(city_state, estimate)) %>% 
+  ggplot(aes(x = city_state, y = estimate)) +
+  geom_point() + 
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+
+
+
+
+
+
+
+
+
+
 
 
 

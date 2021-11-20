@@ -37,10 +37,10 @@ Problem 1 works with the homicide data to estimate the unsolved homicide rate in
 
 Downloading the homicide data, summarizing the raw data, creating a combined city_state variable, and summarizing the total number of homicides and unsolved homicides (disposition of "Closed without arrest" or "Open/No arrest") by cities:
 ```{r}
-raw_hom_data = read_csv(file = "./Data/homicide_data.csv")
+raw_hom_data = read_csv(file = "./Data/homicide_data.csv", show_col_types = FALSE)
 skimr::skim(raw_hom_data)
 
-homicide_df = read_csv(file = "./Data/homicide_data.csv", na = c("", "Unknown")) %>% 
+homicide_df = read_csv(file = "./Data/homicide_data.csv", na = c("", "Unknown"), show_col_types = FALSE) %>% 
   mutate(
     city_state = str_c(city, state),
     resolution = case_when(
@@ -154,18 +154,50 @@ results_df %>%
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 ```
 
+## Problem 2 - Longitudinal Study Data
 
+Data from a longitudinal study that included a control arm and an experimental arm was downloaded and saved locally. Data for each participant is included in a separate file, and file names include the subject ID and arm.
 
+Creating a tidy dataframe containing data from all participants, including the subject ID, arm, and observations over time:
 
+```{r}
+file_names = c(files = list.files("./Data/p2_zipdata/"))
 
+csv_reading_func = function(df) {
+  data = tibble(
+    subject_id = substr(df, 1, 6), 
+    study_arm = substr(df, 1, 3), 
+    read_csv(str_c("./Data/p2_zipdata/", df), show_col_types = FALSE))
+  return(data)
+}
 
+study_data = map_dfr(file_names, csv_reading_func) %>% 
+  mutate(
+    study_arm = case_when(
+      study_arm == "con" ~ "control",
+      study_arm == "exp" ~ "experimental"
+    )
+  ) %>% 
+  pivot_longer(week_1:week_8,
+    names_to = "study_week", 
+    names_prefix = "week_"
+  )
 
+```
 
+Making a spaghetti plot showing observations on each subject over time, and comment on differences between groups.
 
+```{r}
+study_data %>% 
+  ggplot(aes(x = study_week, y = value)) +
+  geom_line(aes(group = subject_id, color = study_arm)) + 
+  labs(
+    title = "Study Measurements Over Time", 
+    y = "Study Value",
+    x = "Study Week", 
+    color = "Study Arm"
+  ) + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
 
-
-
-
-
-
-
+There appears to be an increasing trend of study values over time among the subjects in the experimental arm of the study, but not in the control arm whose values remain about the same over the 8 week study period.

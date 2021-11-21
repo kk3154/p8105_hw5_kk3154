@@ -219,7 +219,7 @@ Writing a function to replace these missing values with the mean continuous valu
 ```{r}
 fix_na = function(vector) {
   if (is.numeric(vector)) {
-    vector = ifelse(is.na(vector), mean(vector, na.rm = TRUE), vector)
+    vector = ifelse(is.na(vector), round(mean(vector, na.rm = TRUE), 2), round(vector, 2))
   }
   else if (is.character(vector)) {
     vector = ifelse(is.na(vector), "virginica", vector)
